@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Email Collector{% endblock %} — Gmail Replacement Email Collector</title>
+  <link rel="stylesheet" href="{{ url_prefix }}/static/style.css">
+  <link rel="icon" type="image/png" href="{{ url_prefix }}/static/icon.png">
+</head>
+<body>
+<header class="topbar">
+  <a href="{{ url_prefix }}/" class="brand">
+    <img src="{{ url_prefix }}/static/icon.png" width="28" height="28" alt="">
+    <span>Email Collector</span>
+  </a>
+  <nav>
+    <a href="{{ url_prefix }}/">Dashboard</a>
+    <a href="{{ url_prefix }}/archive">Archive</a>
+    <a href="{{ url_prefix }}/oauth">Gmail OAuth</a>
+    <a href="{{ url_prefix }}/rules">Rules</a>
+    <a href="{{ url_prefix }}/settings">Settings</a>
+    <a href="{{ url_prefix }}/logout" class="logout">Log out</a>
+  </nav>
+</header>
+<main>
+  {% block content %}{% endblock %}
+</main>
+<footer>
+  <small>Gmail Replacement Email Collector · MIT · <a href="https://github.com/dblagbro/gmail-replacement-email-collector">github</a></small>
+</footer>
+</body>
+</html>

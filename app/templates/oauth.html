@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Gmail OAuth{% endblock %}
+{% block content %}
+<h1>Gmail OAuth</h1>
+<p>Connect each Gmail account that should receive forwarded mail.
+   Uses <code>messages.insert</code> — the original <em>From:</em>, <em>Date:</em>, and headers are preserved exactly as sent.</p>
+
+{% if request.query_params.get('ok') %}
+  <div class="ok">Connected: <strong>{{ request.query_params['ok'] }}</strong></div>
+{% endif %}
+
+<section>
+  <h2>Connected accounts</h2>
+  {% if oauth_accounts %}
+  <table>
+    <thead><tr><th>Account</th><th>Mode</th><th>Scopes</th><th></th></tr></thead>
+    <tbody>
+    {% for o in oauth_accounts %}
+      {% if o.gmail_account != '__pending__' %}
+      <tr>
+        <td>{{ o.gmail_account }}</td>
+        <td>
+          <span class="pill {% if o.use_builtin_app %}ok{% else %}off{% endif %}">
+            {% if o.use_builtin_app %}built-in app{% else %}BYO Google Cloud project{% endif %}
+          </span>
+        </td>
+        <td><small class="muted">{{ o.scopes }}</small></td>
+        <td>
+          <form method="post" action="{{ url_prefix }}/oauth/{{ o.gmail_account }}/delete" style="display:inline"
+                onsubmit="return confirm('Disconnect {{ o.gmail_account }}? Source accounts using it will fail until reconnected.')">
+            <button class="btn-mini danger" type="submit">Disconnect</button>
+          </form>
+        </td>
+      </tr>
+      {% endif %}
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No accounts connected yet.</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Connect a new Gmail account</h2>
+
+  <form method="post" action="{{ url_prefix }}/oauth/start" enctype="multipart/form-data" class="card">
+    <fieldset>
+      <legend>OAuth client</legend>
+      <label><input type="radio" name="mode" value="builtin" checked> <strong>Use the built-in app</strong> (easiest — works once Google verification is approved)</label>
+      <label><input type="radio" name="mode" value="byo"> <strong>Use my own Google Cloud project</strong> (privacy-first)</label>
+      <label>Client secret JSON (BYO mode only)
+        <input type="file" name="client_secret_json" accept=".json,application/json">
+      </label>
+      <p class="muted small">See <a href="https://github.com/dblagbro/gmail-replacement-email-collector/blob/main/docs/GMAIL_OAUTH.md">docs/GMAIL_OAUTH.md</a> for how to create your own client_secret.json.</p>
+    </fieldset>
+    <button type="submit" class="btn">Connect Gmail →</button>
+  </form>
+</section>
+{% endblock %}

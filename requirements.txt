@@ -1,0 +1,24 @@
+fastapi==0.111.0
+uvicorn[standard]==0.30.1
+jinja2==3.1.4
+python-multipart==0.0.9
+itsdangerous==2.2.0
+
+# IMAP with IDLE support
+imap-tools==1.6.0
+
+# Gmail API
+google-auth==2.29.0
+google-auth-oauthlib==1.2.0
+google-auth-httplib2==0.2.0
+google-api-python-client==2.130.0
+
+# Encryption + auth
+cryptography==42.0.7
+bcrypt==4.1.3
+
+# Scheduler (retention sweeper, fallback poll)
+apscheduler==3.10.4
+
+# HTTP for OAuth flows
+httpx==0.27.0

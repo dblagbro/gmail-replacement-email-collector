@@ -1,0 +1,18 @@
+# Standalone example for users running this on its own.
+# (For multi-service hosts, just paste the service block into your existing compose file.)
+services:
+  gmail-email-collector:
+    image: dblagbro/gmail-replacement-email-collector:latest
+    container_name: gmail-email-collector
+    restart: unless-stopped
+    ports:
+      - "8077:8077"
+    volumes:
+      - ./data:/data
+    environment:
+      # If hosting behind nginx at a subpath, set URL_PREFIX to that path
+      # URL_PREFIX: /email-forwarder
+      # Optional: built-in OAuth client (otherwise users use BYO mode in the UI)
+      # BUILTIN_OAUTH_CLIENT_ID: ""
+      # BUILTIN_OAUTH_CLIENT_SECRET: ""
+      DEFAULT_RETENTION_DAYS: "30"

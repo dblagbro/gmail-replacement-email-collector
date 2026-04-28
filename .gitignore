@@ -1,0 +1,42 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.spec.bak
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Local data — never commit secrets, OAuth tokens, archives, db
+data/
+*.db
+*.db-shm
+*.db-wal
+*.eml
+secret.key
+credentials.json
+token.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local overrides
+.env
+.env.local
+docker-compose.override.yml

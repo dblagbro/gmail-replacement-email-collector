@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+
+<section class="cards">
+  <div class="card stat"><div class="num">{{ stats.inserted }}</div><div class="label">Inserted</div></div>
+  <div class="card stat"><div class="num">{{ stats.failed }}</div><div class="label">Failed</div></div>
+  <div class="card stat"><div class="num">{{ stats.skipped }}</div><div class="label">Skipped</div></div>
+  <div class="card stat"><div class="num">{{ stats.total }}</div><div class="label">Total</div></div>
+</section>
+
+<section>
+  <div class="row-between">
+    <h2>Source accounts</h2>
+    <a class="btn" href="{{ url_prefix }}/accounts/new">+ Add account</a>
+  </div>
+  <table>
+    <thead><tr><th>Name</th><th>IMAP</th><th>→ Gmail</th><th>Mode</th><th>Status</th><th>Last check</th><th></th></tr></thead>
+    <tbody>
+    {% for a in accounts %}
+      <tr>
+        <td><a href="{{ url_prefix }}/accounts/{{ a.id }}/edit">{{ a.name }}</a></td>
+        <td>{{ a.imap_username }}@{{ a.imap_host }}</td>
+        <td>{{ a.destination_gmail }}</td>
+        <td>{{ a.poll_mode }}{% if a.poll_mode == 'poll' %} ({{ a.poll_interval_sec }}s){% endif %}</td>
+        <td>
+          {% if a.enabled %}
+            {% set st = worker_status.get(a.id, 'pending') %}
+            <span class="pill ok">{{ st }}</span>
+          {% else %}
+            <span class="pill off">disabled</span>
+          {% endif %}
+          {% if a.last_error %}<div class="err small">{{ a.last_error }}</div>{% endif %}
+        </td>
+        <td>{{ a.last_check_at or "—" }}</td>
+        <td class="actions">
+          <form method="post" action="{{ url_prefix }}/accounts/{{ a.id }}/toggle" style="display:inline">
+            <button type="submit" class="btn-mini">{% if a.enabled %}Pause{% else %}Enable{% endif %}</button>
+          </form>
+          <form method="post" action="{{ url_prefix }}/accounts/{{ a.id }}/delete" style="display:inline"
+                onsubmit="return confirm('Delete account {{ a.name }}? Its archived messages will remain until retention sweep.')">
+            <button type="submit" class="btn-mini danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="muted">No source accounts yet. <a href="{{ url_prefix }}/accounts/new">Add one →</a></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Gmail destinations (OAuth)</h2>
+  {% if oauth_accounts %}
+    <ul class="list">
+    {% for o in oauth_accounts %}
+      <li>
+        <strong>{{ o.gmail_account }}</strong>
+        <span class="pill {% if o.use_builtin_app %}ok{% else %}off{% endif %}">
+          {% if o.use_builtin_app %}built-in app{% else %}your Google Cloud project{% endif %}
+        </span>
+      </li>
+    {% endfor %}
+    </ul>
+  {% else %}
+    <p class="muted">No Gmail OAuth set up yet. <a href="{{ url_prefix }}/oauth">Connect a Gmail account →</a></p>
+  {% endif %}
+</section>
+
+<section>
+  <div class="row-between">
+    <h2>Recent activity</h2>
+    <form method="post" action="{{ url_prefix }}/actions/sweep" style="display:inline">
+      <button class="btn-mini" type="submit" title="Run retention sweep now">Run sweep</button>
+    </form>
+  </div>
+  <table class="log">
+    <thead><tr><th>When</th><th>Lvl</th><th>Account</th><th>Message</th></tr></thead>
+    <tbody>
+    {% for r in activity %}
+      <tr class="lvl-{{ r.level }}">
+        <td class="ts">{{ r.ts }}</td>
+        <td>{{ r.level }}</td>
+        <td>{{ r.account_name or "—" }}</td>
+        <td>{{ r.message }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}{% if account %}Edit{% else %}Add{% endif %} account{% endblock %}
+{% block content %}
+<h1>{% if account %}Edit account: {{ account.name }}{% else %}Add source account{% endif %}</h1>
+
+{% if not oauth_accounts %}
+<div class="warn">
+  <strong>No Gmail OAuth set up yet.</strong>
+  You'll need at least one connected Gmail destination first.
+  <a href="{{ url_prefix }}/oauth">Connect a Gmail account →</a>
+</div>
+{% endif %}
+
+<form method="post" action="{{ url_prefix }}/accounts/save" class="form-grid">
+  <input type="hidden" name="account_id" value="{{ account.id if account else 0 }}">
+
+  <fieldset>
+    <legend>Identification</legend>
+    <label>Display name
+      <input name="name" required value="{{ account.name if account else '' }}" placeholder="Earthlink">
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>IMAP source</legend>
+    <label>Host <input name="imap_host" required value="{{ account.imap_host if account else 'imap.earthlink.net' }}"></label>
+    <label>Port <input name="imap_port" type="number" required value="{{ account.imap_port if account else 993 }}"></label>
+    <label>Username <input name="imap_username" required value="{{ account.imap_username if account else '' }}" placeholder="you@earthlink.net"></label>
+    <label>Password
+      <input name="imap_password" type="password"
+             {% if not account %}required{% endif %}
+             placeholder="{% if account %}(unchanged — leave blank to keep){% else %}IMAP password{% endif %}">
+    </label>
+    <label>Folder <input name="imap_folder" value="{{ account.imap_folder if account else 'INBOX' }}"></label>
+    <label>SSL
+      <select name="use_ssl">
+        <option value="1" {% if not account or account.use_ssl %}selected{% endif %}>Yes (port 993)</option>
+        <option value="0" {% if account and not account.use_ssl %}selected{% endif %}>No</option>
+      </select>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Polling</legend>
+    <label>Mode
+      <select name="poll_mode">
+        <option value="idle" {% if not account or account.poll_mode == 'idle' %}selected{% endif %}>IMAP IDLE — instant push (recommended)</option>
+        <option value="poll" {% if account and account.poll_mode == 'poll' %}selected{% endif %}>Periodic poll</option>
+      </select>
+    </label>
+    <label>Poll interval (seconds, used in poll mode)
+      <input name="poll_interval_sec" type="number" min="30" value="{{ account.poll_interval_sec if account else 300 }}">
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Destination</legend>
+    <label>Gmail account (OAuth)
+      <select name="destination_gmail" required>
+        {% for o in oauth_accounts %}
+          <option value="{{ o.gmail_account }}" {% if account and account.destination_gmail == o.gmail_account %}selected{% endif %}>{{ o.gmail_account }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Auto-apply Gmail label (optional)
+      <input name="gmail_label" value="{{ account.gmail_label if account and account.gmail_label else '' }}" placeholder="e.g. earthlink">
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>State</legend>
+    <label><input type="checkbox" name="enabled" value="1" {% if not account or account.enabled %}checked{% endif %}> Enabled</label>
+  </fieldset>
+
+  <div class="actions">
+    <button type="submit" class="btn">Save</button>
+    <a class="btn-link" href="{{ url_prefix }}/">Cancel</a>
+  </div>
+</form>
+{% endblock %}

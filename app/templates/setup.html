@@ -1,0 +1,12 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Set up — Email Collector</title>
+<link rel="stylesheet" href="{{ url_prefix }}/static/style.css"></head>
+<body class="auth-page">
+<form method="post" class="card">
+  <h1>First-time setup</h1>
+  <p>Pick a password for the web UI. You'll use this every time you log in.</p>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <label>Password<input type="password" name="password" minlength="8" required autofocus></label>
+  <label>Confirm<input type="password" name="confirm" minlength="8" required></label>
+  <button type="submit">Create</button>
+</form>
+</body></html>

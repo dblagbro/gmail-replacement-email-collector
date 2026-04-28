@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Rules{% endblock %}
+{% block content %}
+<h1>Rules</h1>
+<p class="muted">Per-account or global rules. Patterns are <em>glob-style</em> (use <code>*</code> wildcards), or prefix with <code>re:</code> for a regex.</p>
+
+<section>
+  <h2>Active rules</h2>
+  <table>
+    <thead><tr><th>Name</th><th>Account</th><th>Match</th><th>Action</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rules %}
+      <tr>
+        <td>{{ r.name }}</td>
+        <td>{{ r.account_name or "All" }}</td>
+        <td><small><code>{{ r.match_field }}: {{ r.match_pattern }}</code></small></td>
+        <td>{{ r.action }}{% if r.action_arg %} → {{ r.action_arg }}{% endif %}</td>
+        <td>
+          <form method="post" action="{{ url_prefix }}/rules/{{ r.id }}/delete" style="display:inline"
+                onsubmit="return confirm('Delete rule {{ r.name }}?')">
+            <button class="btn-mini danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5" class="muted">No rules.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2>Add rule</h2>
+  <form method="post" action="{{ url_prefix }}/rules/save" class="form-grid">
+    <label>Name<input name="name" required placeholder="Skip newsletter spam"></label>
+    <label>Account
+      <select name="account_id">
+        <option value="">(All accounts)</option>
+        {% for a in accounts %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Match field
+      <select name="match_field">
+        <option value="from">From</option>
+        <option value="to">To</option>
+        <option value="subject">Subject</option>
+      </select>
+    </label>
+    <label>Pattern<input name="match_pattern" required placeholder="*newsletter*  or  re:^promo"></label>
+    <label>Action
+      <select name="action">
+        <option value="skip">Skip (don't insert)</option>
+        <option value="label">Apply label</option>
+      </select>
+    </label>
+    <label>Action argument (label name, etc.)
+      <input name="action_arg" placeholder="newsletters">
+    </label>
+    <div class="actions"><button type="submit" class="btn">Add rule</button></div>
+  </form>
+</section>
+{% endblock %}

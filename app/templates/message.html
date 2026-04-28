@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ m.subject or "(no subject)" }}{% endblock %}
+{% block content %}
+<a href="{{ url_prefix }}/archive">← Back to archive</a>
+<h1>{{ m.subject or "(no subject)" }}</h1>
+
+<dl class="meta">
+  <dt>From</dt><dd>{{ m.from_addr }}</dd>
+  <dt>To</dt><dd>{{ m.to_addr }}</dd>
+  <dt>Date</dt><dd>{{ m.msg_date }}</dd>
+  <dt>Account</dt><dd>{{ m.account_name }}</dd>
+  <dt>Status</dt><dd><span class="pill st-{{ m.status }}">{{ m.status }}</span></dd>
+  <dt>Size</dt><dd>{{ (m.size_bytes / 1024) | round(1) }} KB</dd>
+  {% if m.gmail_msg_id %}<dt>Gmail ID</dt><dd><code>{{ m.gmail_msg_id }}</code></dd>{% endif %}
+  {% if m.error %}<dt>Error</dt><dd class="err">{{ m.error }}</dd>{% endif %}
+  <dt>Inserted</dt><dd>{{ m.inserted_at }}</dd>
+  <dt>Archive until</dt><dd>{{ m.archive_until or "—" }}</dd>
+</dl>
+
+<div class="actions">
+  <a class="btn" href="{{ url_prefix }}/archive/{{ m.id }}/download">Download .eml</a>
+  <form method="post" action="{{ url_prefix }}/archive/{{ m.id }}/delete" style="display:inline"
+        onsubmit="return confirm('Delete local archive copy?')">
+    <label><input type="checkbox" name="also_gmail" value="1"> Also move Gmail copy to Trash</label>
+    <button class="btn danger" type="submit">Delete</button>
+  </form>
+</div>
+
+<h2>Raw RFC822</h2>
+<pre class="raw">{{ raw_excerpt }}</pre>
+{% endblock %}

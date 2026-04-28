@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Archive{% endblock %}
+{% block content %}
+<h1>Archive</h1>
+<p class="muted">Local copies of every forwarded message, kept for the configured retention period.</p>
+
+<form method="get" class="filter-bar">
+  <input type="search" name="q" placeholder="search subject / from / to" value="{{ q }}">
+  <select name="account_id">
+    <option value="">All accounts</option>
+    {% for a in accounts %}
+      <option value="{{ a.id }}" {% if account_id == a.id %}selected{% endif %}>{{ a.name }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn" type="submit">Filter</button>
+</form>
+
+<table>
+  <thead><tr><th>When</th><th>Acct</th><th>From</th><th>Subject</th><th>Status</th><th>Size</th><th></th></tr></thead>
+  <tbody>
+  {% for m in messages %}
+    <tr>
+      <td class="ts">{{ m.inserted_at }}</td>
+      <td>{{ m.account_name }}</td>
+      <td>{{ m.from_addr }}</td>
+      <td><a href="{{ url_prefix }}/archive/{{ m.id }}">{{ m.subject or "(no subject)" }}</a></td>
+      <td><span class="pill st-{{ m.status }}">{{ m.status }}</span></td>
+      <td>{{ (m.size_bytes / 1024) | round(1) }} KB</td>
+      <td class="actions">
+        <a class="btn-mini" href="{{ url_prefix }}/archive/{{ m.id }}/download">.eml</a>
+        <form method="post" action="{{ url_prefix }}/archive/{{ m.id }}/delete" style="display:inline"
+              onsubmit="return confirm('Delete local archive copy?')">
+          <button class="btn-mini danger" type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="muted">No messages.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+
+<div class="pager">
+  {% if page > 1 %}<a class="btn-mini" href="?page={{ page-1 }}{% if q %}&q={{ q }}{% endif %}{% if account_id %}&account_id={{ account_id }}{% endif %}">← Prev</a>{% endif %}
+  <span class="muted">Page {{ page }}</span>
+  {% if messages|length == per %}<a class="btn-mini" href="?page={{ page+1 }}{% if q %}&q={{ q }}{% endif %}{% if account_id %}&account_id={{ account_id }}{% endif %}">Next →</a>{% endif %}
+</div>
+{% endblock %}

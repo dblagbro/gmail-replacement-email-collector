@@ -1,0 +1,12 @@
+.git
+.github
+docs
+tests
+windows
+*.md
+LICENSE
+.gitignore
+.venv
+__pycache__
+*.pyc
+data
