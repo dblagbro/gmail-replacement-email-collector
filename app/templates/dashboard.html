@@ -35,6 +35,14 @@
         </td>
         <td>{{ a.last_check_at or "—" }}</td>
         <td class="actions">
+          <form method="post" action="{{ url_prefix }}/accounts/{{ a.id }}/fetch" style="display:inline">
+            <button type="submit" class="btn-mini" title="Fetch unseen mail right now (skip waiting for next poll)">Fetch now</button>
+          </form>
+          <form method="post" action="{{ url_prefix }}/accounts/{{ a.id }}/fetch" style="display:inline"
+                onsubmit="return confirm('Re-fetch ALL mail in this folder (including already-read)? Use this for initial import. Existing duplicates will be skipped.')">
+            <input type="hidden" name="include_seen" value="1">
+            <button type="submit" class="btn-mini" title="Initial import: also re-fetch already-read mail">Import all</button>
+          </form>
           <form method="post" action="{{ url_prefix }}/accounts/{{ a.id }}/toggle" style="display:inline">
             <button type="submit" class="btn-mini">{% if a.enabled %}Pause{% else %}Enable{% endif %}</button>
           </form>
@@ -73,7 +81,7 @@
   <div class="row-between">
     <h2>Recent activity</h2>
     <form method="post" action="{{ url_prefix }}/actions/sweep" style="display:inline">
-      <button class="btn-mini" type="submit" title="Run retention sweep now">Run sweep</button>
+      <button class="btn-mini" type="submit" title="Purge expired local archive files (does NOT fetch new mail — use 'Fetch now' on an account row for that)">Purge expired archives</button>
     </form>
   </div>
   <table class="log">

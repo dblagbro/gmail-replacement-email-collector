@@ -66,10 +66,26 @@ class AccountWorker(threading.Thread):
             db.log_activity("info", f"Connected to {a['imap_host']} as {a['imap_username']}", self.account_id)
             # Initial sweep — process anything we missed while down
             self._process_unseen(mb, a)
-            if a["poll_mode"] == "idle":
+            mode = a["poll_mode"]
+            if mode == "idle" and not self._server_supports_idle(mb):
+                msg = "Server does not advertise IDLE capability — falling back to poll mode (every 120s)"
+                logger.warning("[acct %s] %s", self.account_id, msg)
+                db.log_activity("warn", msg, self.account_id)
+                db.update_account(self.account_id, poll_mode="poll", poll_interval_sec=max(int(a["poll_interval_sec"]), 120))
+                a = db.get_account(self.account_id)
+                mode = "poll"
+            if mode == "idle":
                 self._idle_loop(mb, a)
             else:
                 self._poll_loop(mb, a)
+
+    @staticmethod
+    def _server_supports_idle(mb) -> bool:
+        try:
+            caps = getattr(mb, "client", mb).capabilities or ()
+            return any(str(c).upper() == "IDLE" for c in caps)
+        except Exception:
+            return False
 
     # --- IDLE path ---
     def _idle_loop(self, mb, a) -> None:
@@ -149,14 +165,25 @@ class AccountWorker(threading.Thread):
             gmail_id = gmail_client.insert_raw(a["destination_gmail"], raw, label_ids)
             self._record(a, msg, mid, raw=raw, status="inserted",
                          error=None, gmail_msg_id=gmail_id, eml_path=str(eml_path))
-            try:
-                mb.flag(msg.uid, "\\Seen", True)
-            except Exception:
-                pass
+            self._post_fetch(mb, msg, a)
         except Exception as e:
             self._record(a, msg, mid, raw=raw, status="failed",
                          error=str(e), gmail_msg_id=None, eml_path=str(eml_path))
             # leave UNSEEN on IMAP so a retry will pick it up later
+
+    def _post_fetch(self, mb, msg, a) -> None:
+        """Apply the configured post-fetch action: keep (mark Seen) or delete (mark Seen+Deleted+expunge)."""
+        action = (a["post_fetch_action"] if "post_fetch_action" in a.keys() else "keep") or "keep"
+        try:
+            mb.flag(msg.uid, "\\Seen", True)
+            if action == "delete":
+                mb.flag(msg.uid, "\\Deleted", True)
+                try:
+                    mb.expunge()
+                except Exception as e:
+                    logger.warning("[acct %s] expunge failed: %s", self.account_id, e)
+        except Exception as e:
+            logger.warning("[acct %s] post-fetch flag failed: %s", self.account_id, e)
 
     def _record(self, a, msg, mid: str, *, raw: bytes | None, status: str,
                 error: str | None, gmail_msg_id: str | None, eml_path: str | None) -> None:

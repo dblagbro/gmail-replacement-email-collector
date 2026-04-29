@@ -177,13 +177,17 @@ def account_save(
     poll_interval_sec: int = Form(300),
     gmail_label: str = Form(""),
     destination_gmail: str = Form(...),
+    post_fetch_action: str = Form("keep"),
     enabled: int = Form(1),
 ):
+    if post_fetch_action not in ("keep", "delete"):
+        post_fetch_action = "keep"
     fields = dict(
         name=name, imap_host=imap_host, imap_port=imap_port,
         imap_username=imap_username, imap_folder=imap_folder, use_ssl=use_ssl,
         poll_mode=poll_mode, poll_interval_sec=poll_interval_sec,
         gmail_label=gmail_label or None, destination_gmail=destination_gmail,
+        post_fetch_action=post_fetch_action,
         enabled=enabled,
     )
     if imap_password:
@@ -424,4 +428,57 @@ def actions_sweep(_=Depends(_require_auth)):
 @app.post("/actions/reconcile")
 def actions_reconcile(_=Depends(_require_auth)):
     forwarder.reconcile()
+    return RedirectResponse(f"{URL_PREFIX}/", status_code=303)
+
+
+def _do_manual_fetch(aid: int, include_seen: bool) -> None:
+    """Run a one-off fetch in a background thread (so the HTTP request returns instantly).
+
+    Initial import of years of mail can take minutes — never block the request handler.
+    """
+    from imap_tools import MailBox, MailBoxUnencrypted
+    from app.crypto import decrypt
+    from app.imap_worker import AccountWorker
+    a = db.get_account(aid)
+    if a is None:
+        return
+    pw = decrypt(a["imap_password_enc"]) or ""
+    cls = MailBox if a["use_ssl"] else MailBoxUnencrypted
+    worker = AccountWorker(aid)
+    try:
+        with cls(a["imap_host"], port=a["imap_port"]).login(
+            a["imap_username"], pw, initial_folder=a["imap_folder"]
+        ) as mb:
+            if include_seen:
+                seen_uids = mb.uids("SEEN")
+                if seen_uids:
+                    mb.flag(seen_uids, "\\Seen", False)
+                    db.log_activity(
+                        "info",
+                        f"Manual fetch (include_seen): unflagged {len(seen_uids)} previously-read messages",
+                        aid,
+                    )
+            db.log_activity("info", "Manual fetch started", aid)
+            worker._process_unseen(mb, a)
+            db.log_activity("info", "Manual fetch completed", aid)
+        db.update_account_status(aid, None)
+    except Exception as e:
+        msg = f"Manual fetch failed: {e}"
+        logger.exception(msg)
+        db.log_activity("error", msg, aid)
+        db.update_account_status(aid, msg)
+
+
+@app.post("/accounts/{aid}/fetch")
+def actions_fetch_now(aid: int, include_seen: int = Form(0), _=Depends(_require_auth)):
+    """Kick off a manual fetch in the background; return immediately so the dashboard refreshes fast."""
+    import threading
+    if db.get_account(aid) is None:
+        raise HTTPException(404)
+    threading.Thread(
+        target=_do_manual_fetch,
+        args=(aid, bool(include_seen)),
+        daemon=True,
+        name=f"manual-fetch-{aid}",
+    ).start()
     return RedirectResponse(f"{URL_PREFIX}/", status_code=303)

@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   poll_interval_sec INTEGER NOT NULL DEFAULT 300,
   gmail_label TEXT,
   destination_gmail TEXT,
+  post_fetch_action TEXT NOT NULL DEFAULT 'keep',
   created_at TEXT NOT NULL,
   last_check_at TEXT,
   last_error TEXT
@@ -110,6 +111,10 @@ def conn() -> Iterator[sqlite3.Connection]:
 def init_db() -> None:
     with conn() as c:
         c.executescript(SCHEMA)
+        # Lightweight migrations for columns added after v1.0.0
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(accounts)").fetchall()}
+        if "post_fetch_action" not in cols:
+            c.execute("ALTER TABLE accounts ADD COLUMN post_fetch_action TEXT NOT NULL DEFAULT 'keep'")
 
 
 # ----- settings_kv helpers -----

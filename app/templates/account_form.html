@@ -65,6 +65,12 @@
     <label>Auto-apply Gmail label (optional)
       <input name="gmail_label" value="{{ account.gmail_label if account and account.gmail_label else '' }}" placeholder="e.g. earthlink">
     </label>
+    <label>After successful insert into Gmail
+      <select name="post_fetch_action">
+        <option value="keep" {% if not account or (account.post_fetch_action or 'keep') == 'keep' %}selected{% endif %}>Keep on source server (just mark as Read)</option>
+        <option value="delete" {% if account and account.post_fetch_action == 'delete' %}selected{% endif %}>Delete from source server (true Gmail Mail-Fetcher behavior)</option>
+      </select>
+    </label>
   </fieldset>
 
   <fieldset>
