@@ -1,0 +1,5 @@
+title: Gmail Replacement Email Collector
+description: Drop-in replacement for Gmail's discontinued POP3/Gmailify mail-fetching feature.
+theme: jekyll-theme-minimal
+plugins:
+  - jekyll-seo-tag
