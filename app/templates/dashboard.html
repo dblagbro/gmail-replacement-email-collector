@@ -43,6 +43,13 @@
             <input type="hidden" name="include_seen" value="1">
             <button type="submit" class="btn-mini" title="Initial import: also re-fetch already-read mail">Import all</button>
           </form>
+          {% set fc = failed_counts.get(a.id, 0) %}
+          {% if fc > 0 %}
+          <form method="post" action="{{ url_prefix }}/accounts/{{ a.id }}/retry-failed" style="display:inline"
+                onsubmit="return confirm('Replay {{ fc }} failed insert(s) into Gmail using the archived .eml files? Make sure Gmail OAuth is current first.')">
+            <button type="submit" class="btn-mini" title="Re-attempt {{ fc }} message(s) that failed insert into Gmail (e.g. after re-authorizing OAuth)">Retry failed ({{ fc }})</button>
+          </form>
+          {% endif %}
           <form method="post" action="{{ url_prefix }}/accounts/{{ a.id }}/toggle" style="display:inline">
             <button type="submit" class="btn-mini">{% if a.enabled %}Pause{% else %}Enable{% endif %}</button>
           </form>

@@ -12,8 +12,18 @@
     <label>Default Gmail label applied at insert (blank = none)
       <input name="default_label" value="{{ settings.get('default_label', '') }}">
     </label>
+    <label>Alert email — recipient for OAuth-reauth reminders (blank = use destination Gmail)
+      <input type="email" name="alert_email" value="{{ settings.get('alert_email', '') }}" placeholder="you@example.com">
+    </label>
     <button type="submit" class="btn">Save</button>
   </form>
+  <p class="muted small">Reminder sender: source-account IMAP server's SMTP submission endpoint, authenticated with the same credentials. Sent at most once per 24 h, only when token age ≥ 5.5 days or recent invalid_grant detected.</p>
+  <form method="post" action="{{ url_prefix }}/settings/test-reminder" style="margin-top:0.5em">
+    <button type="submit" class="btn">Send test reminder now</button>
+  </form>
+  {% if settings.get('last_reminder_sent_at') %}
+    <p class="muted small">Last reminder sent: {{ settings.get('last_reminder_sent_at') }}</p>
+  {% endif %}
 </section>
 
 <section class="card">

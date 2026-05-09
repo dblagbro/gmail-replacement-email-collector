@@ -13,10 +13,12 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import archive, auth, db, forwarder, gmail_client
+from app import archive, auth, db, forwarder, gmail_client, notifier
 from app.config import (
     DEFAULT_LABEL,
     DEFAULT_RETENTION_DAYS,
+    OAUTH_REMINDER_CHECK_HOURS,
+    PUBLIC_BASE_URL,
     SWEEP_INTERVAL_HOURS,
     URL_PREFIX,
 )
@@ -38,8 +40,21 @@ async def lifespan(app: FastAPI):
         db.set_setting("retention_days", str(DEFAULT_RETENTION_DAYS))
     if db.get_setting("default_label") is None:
         db.set_setting("default_label", DEFAULT_LABEL)
+    if db.get_setting("alert_email") is None:
+        # Default the OAuth-reminder recipient to the destination Gmail of the first account if any.
+        accts = db.list_accounts()
+        if accts and accts[0]["destination_gmail"]:
+            db.set_setting("alert_email", accts[0]["destination_gmail"])
     forwarder.reconcile()
     scheduler.add_job(archive.sweep_expired, "interval", hours=SWEEP_INTERVAL_HOURS, id="sweep")
+    if PUBLIC_BASE_URL:
+        scheduler.add_job(
+            notifier.check_and_send,
+            "interval",
+            hours=OAUTH_REMINDER_CHECK_HOURS,
+            id="oauth_reminder",
+            kwargs={"public_base_url": PUBLIC_BASE_URL},
+        )
     scheduler.start()
     db.log_activity("info", "Service started")
     try:
@@ -75,7 +90,8 @@ def _require_auth(request: Request, ef_session: str | None = Cookie(None)) -> st
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "version": "1.0.0"}
+    from app import __version__
+    return {"status": "ok", "version": __version__}
 
 
 # ---- setup (first run) ----
@@ -139,6 +155,7 @@ def dashboard(request: Request, _=Depends(_require_auth)):
         stats=db.stats(),
         worker_status=forwarder.status(),
         activity=db.recent_activity(50),
+        failed_counts=db.failed_counts_by_account(),
     ))
 
 
@@ -235,9 +252,21 @@ def settings_post(
     _=Depends(_require_auth),
     retention_days: int = Form(...),
     default_label: str = Form(""),
+    alert_email: str = Form(""),
 ):
     db.set_setting("retention_days", str(max(1, retention_days)))
     db.set_setting("default_label", default_label)
+    db.set_setting("alert_email", alert_email.strip())
+    return RedirectResponse(f"{URL_PREFIX}/settings", status_code=303)
+
+
+@app.post("/settings/test-reminder")
+def settings_test_reminder(_=Depends(_require_auth)):
+    """Send the OAuth-reminder email immediately (bypasses the 24 h rate limit) for testing."""
+    db.set_setting("last_reminder_sent_at", None)  # clear rate limit
+    base = PUBLIC_BASE_URL or ""
+    sent, detail = notifier.send_reminder(base, reason="manual test from settings page")
+    db.log_activity("info" if sent else "error", f"Test reminder: {detail}")
     return RedirectResponse(f"{URL_PREFIX}/settings", status_code=303)
 
 
@@ -480,5 +509,65 @@ def actions_fetch_now(aid: int, include_seen: int = Form(0), _=Depends(_require_
         args=(aid, bool(include_seen)),
         daemon=True,
         name=f"manual-fetch-{aid}",
+    ).start()
+    return RedirectResponse(f"{URL_PREFIX}/", status_code=303)
+
+
+def _do_retry_failed(aid: int) -> None:
+    """Re-run gmail_client.insert_raw for every status='failed' message of this account.
+
+    Reads the original .eml from disk so the retry is byte-identical to the first attempt.
+    Common use: after re-authorizing Gmail (Testing-mode refresh tokens expire every 7 days
+    until the OAuth app is verified by Google).
+    """
+    a = db.get_account(aid)
+    if a is None:
+        return
+    failed = db.list_failed_messages(aid)
+    if not failed:
+        db.log_activity("info", "Retry-failed: nothing to retry", aid)
+        return
+    db.log_activity("info", f"Retry-failed: replaying {len(failed)} message(s)", aid)
+    label_id_cache: dict[str, str] = {}
+    ok = err = missing = 0
+    for r in failed:
+        eml_path = r["eml_path"]
+        if not eml_path or not os.path.exists(eml_path):
+            db.update_message_status(r["id"], status="failed",
+                                     error="Retry skipped: .eml file no longer on disk")
+            missing += 1
+            continue
+        try:
+            with open(eml_path, "rb") as f:
+                raw = f.read()
+            label_ids = ["INBOX", "UNREAD"]
+            target_label = a["gmail_label"]
+            if target_label and a["destination_gmail"]:
+                if target_label not in label_id_cache:
+                    label_id_cache[target_label] = gmail_client.ensure_label(
+                        a["destination_gmail"], target_label
+                    )
+                label_ids.append(label_id_cache[target_label])
+            gmail_id = gmail_client.insert_raw(a["destination_gmail"], raw, label_ids)
+            db.update_message_status(r["id"], status="inserted", gmail_msg_id=gmail_id, error=None)
+            ok += 1
+        except Exception as e:
+            db.update_message_status(r["id"], status="failed", error=str(e))
+            err += 1
+    summary = f"Retry-failed done: {ok} inserted, {err} still failing, {missing} .eml missing"
+    db.log_activity("info" if err == 0 and missing == 0 else "warn", summary, aid)
+
+
+@app.post("/accounts/{aid}/retry-failed")
+def actions_retry_failed(aid: int, _=Depends(_require_auth)):
+    """Replay all status='failed' messages for an account in a background thread."""
+    import threading
+    if db.get_account(aid) is None:
+        raise HTTPException(404)
+    threading.Thread(
+        target=_do_retry_failed,
+        args=(aid,),
+        daemon=True,
+        name=f"retry-failed-{aid}",
     ).start()
     return RedirectResponse(f"{URL_PREFIX}/", status_code=303)

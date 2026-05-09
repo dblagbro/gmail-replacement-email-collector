@@ -257,6 +257,34 @@ def stats() -> dict[str, int]:
     return {"total": total, "inserted": ok, "failed": failed, "skipped": skipped}
 
 
+def failed_counts_by_account() -> dict[int, int]:
+    with conn() as c:
+        rows = c.execute(
+            "SELECT account_id, COUNT(*) AS n FROM messages WHERE status='failed' GROUP BY account_id"
+        ).fetchall()
+    return {r["account_id"]: r["n"] for r in rows}
+
+
+def list_failed_messages(account_id: int | None = None) -> list[sqlite3.Row]:
+    sql = "SELECT * FROM messages WHERE status='failed'"
+    params: tuple[Any, ...] = ()
+    if account_id is not None:
+        sql += " AND account_id=?"
+        params = (account_id,)
+    sql += " ORDER BY id ASC"
+    with conn() as c:
+        return c.execute(sql, params).fetchall()
+
+
+def update_message_status(msg_id: int, *, status: str, gmail_msg_id: str | None = None,
+                          error: str | None = None) -> None:
+    with conn() as c:
+        c.execute(
+            "UPDATE messages SET status=?, gmail_msg_id=?, error=? WHERE id=?",
+            (status, gmail_msg_id, error, msg_id),
+        )
+
+
 # ----- activity log -----
 
 def log_activity(level: str, message: str, account_id: int | None = None) -> None:

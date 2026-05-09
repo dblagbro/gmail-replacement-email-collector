@@ -8,6 +8,8 @@ Both modes share the same fetch/dedupe/insert path.
 """
 from __future__ import annotations
 import logging
+import socket
+import ssl
 import threading
 import time
 from email import message_from_bytes
@@ -16,6 +18,29 @@ from typing import Any
 
 from imap_tools import MailBox, MailBoxUnencrypted, AND
 from imap_tools.errors import MailboxLoginError
+
+
+# Server-initiated disconnects from long-lived IDLE/poll sockets — keepalive drops,
+# TLS hangups, NAT timeouts. The outer loop reconnects automatically; these are
+# routine and shouldn't pollute the activity log as errors.
+_TRANSIENT_DROP_TYPES = (
+    ConnectionError,           # ECONNRESET / EPIPE / ECONNABORTED
+    TimeoutError,
+    socket.timeout,
+    ssl.SSLEOFError,           # the c2427 "EOF in violation of protocol" path
+    OSError,                   # generic socket-level disconnect (broad but harmless here)
+)
+
+
+def _is_transient_disconnect(exc: BaseException) -> bool:
+    if isinstance(exc, _TRANSIENT_DROP_TYPES):
+        return True
+    s = str(exc).lower()
+    return ("eof occurred" in s
+            or "connection reset" in s
+            or "connection aborted" in s
+            or "broken pipe" in s
+            or "timed out" in s)
 
 from app import archive, db, gmail_client, rules
 from app.config import IMAP_IDLE_TIMEOUT_SEC, MAX_MESSAGE_BYTES
@@ -47,12 +72,21 @@ class AccountWorker(threading.Thread):
                 db.log_activity("error", msg, self.account_id)
                 self._stop.wait(60)
             except Exception as e:
-                msg = f"IMAP loop error: {e}"
-                logger.exception("[acct %s] %s", self.account_id, msg)
-                db.update_account_status(self.account_id, msg)
-                db.log_activity("error", msg, self.account_id)
-                self._stop.wait(min(backoff, 300))
-                backoff = min(backoff * 2, 300)
+                if _is_transient_disconnect(e):
+                    msg = f"IMAP connection dropped, reconnecting: {e}"
+                    logger.info("[acct %s] %s", self.account_id, msg)
+                    db.log_activity("info", msg, self.account_id)
+                    # Don't surface transient drops on the dashboard status pill.
+                    db.update_account_status(self.account_id, None)
+                    self._stop.wait(5)
+                    backoff = 5
+                else:
+                    msg = f"IMAP loop error: {e}"
+                    logger.exception("[acct %s] %s", self.account_id, msg)
+                    db.update_account_status(self.account_id, msg)
+                    db.log_activity("error", msg, self.account_id)
+                    self._stop.wait(min(backoff, 300))
+                    backoff = min(backoff * 2, 300)
 
     def _connect_and_run(self) -> None:
         a = db.get_account(self.account_id)

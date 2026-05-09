@@ -31,6 +31,13 @@ SESSION_LIFETIME_HOURS = int(os.environ.get("SESSION_LIFETIME_HOURS", "24"))
 # Retention sweeper interval (hours)
 SWEEP_INTERVAL_HOURS = int(os.environ.get("SWEEP_INTERVAL_HOURS", "6"))
 
+# OAuth re-auth reminder check interval (hours)
+OAUTH_REMINDER_CHECK_HOURS = int(os.environ.get("OAUTH_REMINDER_CHECK_HOURS", "6"))
+
+# Public base URL the reminder email links to (e.g. https://www.example.com).
+# Combined with URL_PREFIX to build the OAuth wizard URL.
+PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "")
+
 # IMAP IDLE timeout — server hint says rebind every ~29 min to avoid stale conn
 IMAP_IDLE_TIMEOUT_SEC = int(os.environ.get("IMAP_IDLE_TIMEOUT_SEC", str(29 * 60)))
 
