@@ -1,11 +1,11 @@
 """OAuth re-authorization reminder via SMTP.
 
-While a Gmail OAuth app is in Google's "Testing" publishing state (i.e. not yet
-verified by Trust & Safety), refresh tokens issued to it expire 7 days after
-issue. Until verification clears, users have to re-run the OAuth wizard weekly.
+Google stops accepting a stored Gmail grant when it is revoked, the Google
+password changes, or the OAuth app is in the "Testing" publishing state (Testing
+grants expire after 7 days). The user then has to re-run the OAuth wizard.
 
 This module:
-  - detects when a re-auth is overdue (token age + recent invalid_grant errors)
+  - detects when a re-auth is needed (Google rejects the grant on refresh, or recent invalid_grant errors)
   - sends a reminder email with a one-click link to the OAuth wizard
   - rate-limits to once per 24 h so it can be safely run on a 6 h timer
 
@@ -69,26 +69,44 @@ def _last_oauth_failure_age_hours() -> float | None:
     return (datetime.now(timezone.utc) - ts).total_seconds() / 3600.0
 
 
-def _oauth_token_age_days() -> float | None:
-    """Age of the oldest stored OAuth refresh token in days, or None if no oauth row."""
+def _rejected_grants() -> list[str]:
+    """Ask Google to refresh each stored grant; return the accounts Google rejects.
+
+    Only an explicit invalid_grant counts. Network trouble or a Google outage is
+    not a reason to send a reminder.
+    """
+    from google.auth.exceptions import RefreshError
+    from google.auth.transport.requests import Request
+
+    from app.gmail_client import _credentials_for
+
+    rejected = []
     with db.conn() as c:
-        row = c.execute("SELECT MIN(created_at) AS ts FROM oauth").fetchone()
-    if not row or not row["ts"]:
-        return None
-    try:
-        ts = datetime.fromisoformat(row["ts"].replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    return (datetime.now(timezone.utc) - ts).total_seconds() / 86400.0
+        accounts = [r["gmail_account"] for r in c.execute(
+            "SELECT gmail_account FROM oauth WHERE refresh_token_enc IS NOT NULL AND gmail_account LIKE '%@%'")]
+    for acct in accounts:
+        try:
+            creds = _credentials_for(acct)
+            creds.refresh(Request())
+        except RefreshError as e:
+            if "invalid_grant" in str(e):
+                rejected.append(acct)
+            else:
+                logger.warning("OAuth check for %s: %s", acct, e)
+        except Exception as e:  # network etc. -- try again next check
+            logger.warning("OAuth check for %s skipped: %s", acct, e)
+    return rejected
 
 
 def reminder_due() -> tuple[bool, str]:
     """Decide whether a reminder should be sent right now.
 
     Returns (due, reason). Due if either:
-      - last successful OAuth grant is older than 5.5 days (Google's 7-day cliff
-        leaves a comfortable warning window), or
+      - Google rejects a stored grant right now (invalid_grant on refresh), or
       - any failed-insert with invalid_grant has been logged in the last 24 h.
+
+    The age of a grant alone is no reason: apps published "In production"
+    keep their refresh tokens until revoked.
 
     Always rate-limited to 1 email per 24 h via the last_reminder_sent_at setting.
     """
@@ -105,11 +123,11 @@ def reminder_due() -> tuple[bool, str]:
     if fail_age is not None and fail_age <= 24:
         return True, f"recent invalid_grant ({fail_age:.1f} h ago)"
 
-    token_age = _oauth_token_age_days()
-    if token_age is not None and token_age >= 5.5:
-        return True, f"OAuth token age {token_age:.1f} d (Google revokes Testing-mode tokens at 7 d)"
+    rejected = _rejected_grants()
+    if rejected:
+        return True, f"Google rejected the stored grant for {', '.join(rejected)} (invalid_grant)"
 
-    return False, f"healthy (token age {token_age}, last failure {fail_age} h)"
+    return False, f"healthy (grants accepted, last failure {fail_age} h)"
 
 
 def _build_message(account_row, public_base_url: str, reason: str) -> EmailMessage:
@@ -127,9 +145,9 @@ What to do (~30 seconds):
   3. Back on the dashboard, click "Retry failed (N)" on the {account_row['name']} row to replay any messages that piled up
 
 Why this happens:
-  Google revokes refresh tokens for unverified OAuth apps after 7 days. Once
-  Google Trust & Safety verifies the app (in progress, ETA late May / early
-  June 2026), this requirement disappears entirely.
+  Google no longer accepts the stored Gmail grant. This happens when access
+  is revoked in your Google account, the Google password changes, or the
+  OAuth app is set back to "Testing" (Testing grants expire after 7 days).
 
 — Email Collector
 """

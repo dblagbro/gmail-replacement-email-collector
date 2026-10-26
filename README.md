@@ -59,7 +59,7 @@ Data lives in `%APPDATA%\EmailForwarder\`.
 
 Click **Gmail OAuth → Connect a new Gmail account**. Two modes:
 
-- **Built-in app** (easiest): uses this project's verified Google OAuth client. *(Note: pending Google verification — until approved, the consent screen will say "this app isn't verified" and you'll need to click Advanced → "Go to ... (unsafe)" once. Your data is yours, the app does not phone home.)*
+- **Built-in app** (easiest): uses this project's Google OAuth client (brand-verified, published, so you connect once). *(Note: the Gmail scopes are Google "restricted" scopes that haven't been through Google's paid security review, so the consent screen says "Google hasn't verified this app" when you connect; click Advanced → "Go to ... (unsafe)". Your data is yours, the app does not phone home.)*
 - **BYO Google Cloud project**: create your own OAuth client and upload the `client_secret.json`. See [docs/GMAIL_OAUTH.md](docs/GMAIL_OAUTH.md) for the 5-minute walkthrough. **Maximum privacy** — Google grants tokens to *your* Google Cloud project, not anyone else's.
 
 ### 2. Add an IMAP source

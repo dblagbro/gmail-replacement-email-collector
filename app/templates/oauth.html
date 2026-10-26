@@ -47,7 +47,7 @@
   <form method="post" action="{{ url_prefix }}/oauth/start" enctype="multipart/form-data" class="card">
     <fieldset>
       <legend>OAuth client</legend>
-      <label><input type="radio" name="mode" value="builtin" checked> <strong>Use the built-in app</strong> (easiest — works once Google verification is approved)</label>
+      <label><input type="radio" name="mode" value="builtin" checked> <strong>Use the built-in app</strong> (easiest — Google will say "this app isn't verified": click Advanced → Go to … to continue)</label>
       <label><input type="radio" name="mode" value="byo"> <strong>Use my own Google Cloud project</strong> (privacy-first)</label>
       <label>Client secret JSON (BYO mode only)
         <input type="file" name="client_secret_json" accept=".json,application/json">

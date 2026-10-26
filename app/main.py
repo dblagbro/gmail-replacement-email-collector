@@ -517,8 +517,8 @@ def _do_retry_failed(aid: int) -> None:
     """Re-run gmail_client.insert_raw for every status='failed' message of this account.
 
     Reads the original .eml from disk so the retry is byte-identical to the first attempt.
-    Common use: after re-authorizing Gmail (Testing-mode refresh tokens expire every 7 days
-    until the OAuth app is verified by Google).
+    Common use: after re-authorizing Gmail (Google rejected the grant: access revoked,
+    password changed, or a "Testing"-mode OAuth app whose grants expire after 7 days).
     """
     a = db.get_account(aid)
     if a is None:

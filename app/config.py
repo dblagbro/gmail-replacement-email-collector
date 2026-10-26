@@ -15,8 +15,8 @@ GMAIL_SCOPES = [
     "https://www.googleapis.com/auth/gmail.modify",  # needed if user wants delete-from-Gmail action
 ]
 
-# Built-in OAuth client (the verified Google app shipped with this project).
-# Empty by default — set via env or the BYO-OAuth wizard until verification is approved.
+# Built-in OAuth client (the brand-verified Google app shipped with this project).
+# Empty by default — set via env, or use the BYO-OAuth wizard.
 BUILTIN_OAUTH_CLIENT_ID = os.environ.get("BUILTIN_OAUTH_CLIENT_ID", "")
 BUILTIN_OAUTH_CLIENT_SECRET = os.environ.get("BUILTIN_OAUTH_CLIENT_SECRET", "")
 

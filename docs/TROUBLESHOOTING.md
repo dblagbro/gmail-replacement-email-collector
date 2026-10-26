@@ -22,11 +22,15 @@ Fix: Gmail OAuth → Disconnect → Connect again.
 - Gmail's daily insert quota — `messages.insert` is rate-limited (~1 billion quota units/day per project, ~25 units/insert). For normal usage you'll never hit it; if you somehow do, wait a few hours.
 - Spam — `messages.insert` *should* skip spam classification, but if you suspect Gmail's filters are still applied, check Spam folder
 
-## "OAuth consent screen says 'unverified'"
+## "OAuth consent screen says 'Google hasn't verified this app'"
 
-This is normal during early access — Google verification takes 4–6 weeks. Either:
-- Click **Advanced → Go to (unsafe)** once; after that you won't see it again
-- Use BYO mode (your own Google Cloud project) — see [GMAIL_OAUTH.md](GMAIL_OAUTH.md). With BYO, you're the developer of your own app, and Google trusts you implicitly.
+Expected. `gmail.insert` and `gmail.modify` are Google *restricted* scopes; the warning stays until an app passes Google's restricted-scope review (a paid yearly CASA security assessment), whether it's the built-in app or your own BYO project. Click **Advanced → Go to … (unsafe)** to continue. You only see it when you connect, not during normal running.
+
+## "I have to re-authorize every week"
+
+Your OAuth app is in **Testing** mode: Google cancels Testing grants 7 days after you connect. Open Google Cloud Console → **Google Auth Platform → Audience → Publish app**, then reconnect once. Published ("In production") grants last until revoked. See [GMAIL_OAUTH.md](GMAIL_OAUTH.md).
+
+If you're on v1.0.3 or older, the reminder email itself was the problem: it fired every 5.5 days based on the grant's age even when Google still accepted it. v1.0.4 only reminds when Google actually rejects the grant.
 
 ## SmartScreen warning on Windows
 
