@@ -10,7 +10,7 @@
   <dt>Date</dt><dd>{{ m.msg_date }}</dd>
   <dt>Account</dt><dd>{{ m.account_name }}</dd>
   <dt>Status</dt><dd><span class="pill st-{{ m.status }}">{{ m.status }}</span></dd>
-  <dt>Size</dt><dd>{{ (m.size_bytes / 1024) | round(1) }} KB</dd>
+  <dt>Size</dt><dd>{{ ((m.size_bytes or 0) / 1024) | round(1) }} KB</dd>
   {% if m.gmail_msg_id %}<dt>Gmail ID</dt><dd><code>{{ m.gmail_msg_id }}</code></dd>{% endif %}
   {% if m.error %}<dt>Error</dt><dd class="err">{{ m.error }}</dd>{% endif %}
   <dt>Inserted</dt><dd>{{ m.inserted_at }}</dd>
