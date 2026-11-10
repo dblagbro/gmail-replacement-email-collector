@@ -1,5 +1,5 @@
 """Boot the unmodified application on empty synthetic data, with no provider accounts."""
-import json,os,subprocess,sys,tempfile,time,urllib.request,urllib.error
+import json,os,signal,subprocess,sys,tempfile,time,urllib.request,urllib.error
 from pathlib import Path
 with tempfile.TemporaryDirectory(prefix="collector-boot-") as directory:
     env=os.environ.copy()
@@ -22,5 +22,6 @@ with tempfile.TemporaryDirectory(prefix="collector-boot-") as directory:
         process.terminate()
         try:process.wait(10)
         except subprocess.TimeoutExpired:process.kill();process.wait();raise
-    assert process.returncode==0
+    # Uvicorn re-raises a captured termination signal after graceful cleanup.
+    assert process.returncode in (0, -signal.SIGTERM)
 print(json.dumps({"unmodified_app_boot":True,"real_scheduler_start_stop":True,"synthetic_empty_database":True,"provider_accounts":0}))
