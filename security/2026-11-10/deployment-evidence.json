@@ -1,0 +1,93 @@
+{
+  "phase": "deployed_verified",
+  "deployed": true,
+  "original_image": "sha256:7441f7bca85648a036f57e5df65c501220cd13022823e8182419f57fef350d8b",
+  "candidate_image": "sha256:6bd5ace4605ed13e295c62b40fcd94dbd49e281a8dade6f6b3b88934df09ad88",
+  "updated_utc": "2026-11-10T07:30:47.019694+00:00",
+  "health": {
+    "status": "healthy",
+    "image": "sha256:6bd5ace4605ed13e295c62b40fcd94dbd49e281a8dade6f6b3b88934df09ad88",
+    "restart_count": 0
+  },
+  "configuration_preserved": true,
+  "unrelated_containers_unchanged": true,
+  "nginx_unchanged": true,
+  "key_unchanged": true,
+  "health_samples": [
+    {
+      "checked_utc": "2026-11-10T07:31:38.735796+00:00",
+      "health": "healthy",
+      "restart_count": 0
+    },
+    {
+      "checked_utc": "2026-11-10T07:31:58.786293+00:00",
+      "health": "healthy",
+      "restart_count": 0
+    },
+    {
+      "checked_utc": "2026-11-10T07:32:18.837346+00:00",
+      "health": "healthy",
+      "restart_count": 0
+    },
+    {
+      "checked_utc": "2026-11-10T07:32:38.886590+00:00",
+      "health": "healthy",
+      "restart_count": 0
+    },
+    {
+      "checked_utc": "2026-11-10T07:32:58.933940+00:00",
+      "health": "healthy",
+      "restart_count": 0
+    }
+  ],
+  "health_soak_seconds": 80,
+  "live_anonymous_checks": [
+    {
+      "path": "/health",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/",
+      "method": "GET",
+      "status": 307
+    },
+    {
+      "path": "/settings",
+      "method": "GET",
+      "status": 307
+    },
+    {
+      "path": "/oauth/callback?code=synthetic-invalid",
+      "method": "GET",
+      "status": 307
+    },
+    {
+      "path": "/login",
+      "method": "POST",
+      "status": 403
+    }
+  ],
+  "provider_acceptance": false,
+  "source_pr": "https://github.com/dblagbro/gmail-replacement-email-collector/pull/1",
+  "policy_correction_pr": "https://github.com/dblagbro/gmail-replacement-email-collector/pull/2",
+  "source_merge": "d06a902e911abb0a1b9763ce5a6270c08ff800bb",
+  "policy_merge": "589ff53c816acc2c11785ef080bb6e96075282ec",
+  "release_policy_tests": 9,
+  "offline_regressions": 30,
+  "exact_candidate_scan": {
+    "critical": 0,
+    "high": 47,
+    "rescanned_for_deployment": false
+  },
+  "scope": "Only collector image changed; all data, keys, retained recovery copies and original image preserved.",
+  "external_probe_scope": "Windows workstation; same network egress as earlier tests, not an independent external vantage.",
+  "exposure": {
+    "private_https_basic_challenge": true,
+    "public_https_basic_challenge": true,
+    "forged_identity_or_forwarding_headers_bypass": false,
+    "private_8077_health": 200,
+    "public_8077_bounded_probe": "no response"
+  },
+  "rollback_history": "First rollout restored original after strict default-DNS null/list mismatch; merged normalization preserves explicit DNS and other policy; reviewed retry passed."
+}
