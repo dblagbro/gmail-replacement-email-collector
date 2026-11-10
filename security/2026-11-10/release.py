@@ -24,7 +24,12 @@ def spec(x):
     config={k:v for k,v in x['Config'].items() if k not in ['Image','Labels','Hostname','Env']}
     base_keys={'PATH','LANG','GPG_KEY','PYTHON_VERSION','PYTHON_SHA256'}
     config['Env']={k:v for k,v in (e.split('=',1) for e in x['Config']['Env']) if k not in base_keys}
-    return {'config':config,'host':{k:v for k,v in x['HostConfig'].items() if k not in ['ContainerIDFile']},'mounts':[{k:v for k,v in m.items() if k not in ['Name']} for m in x['Mounts']]}
+    host={k:v for k,v in x['HostConfig'].items() if k not in ['ContainerIDFile']}
+    # Docker serializes inherited default DNS as either null or an empty list.
+    # Nonempty explicit DNS configuration must still compare exactly.
+    for key in ['Dns','DnsOptions','DnsSearch']:
+        if host.get(key) is None:host[key]=[]
+    return {'config':config,'host':host,'mounts':[{k:v for k,v in m.items() if k not in ['Name']} for m in x['Mounts']]}
 def manifest(path):
     result={}
     for p in sorted(Path(path).rglob('*')):
@@ -130,7 +135,9 @@ def main():
             save('starting_candidate')
             command(['docker','compose','-f',str(compose),'up','-d','--no-deps','--pull','never',SERVICE]);stopped=False
             state['health']=health(args.candidate_image)
-            assert spec(inspect(SERVICE))==spec(original),'Runtime configuration changed beyond image'
+            deployed=inspect(SERVICE)
+            (backup/'candidate-container-private.json').write_text(json.dumps(deployed))
+            assert spec(deployed)==spec(original),'Runtime configuration changed beyond image'
             assert all_containers()==others and nginx_hash()==nginx
             # Workers resume normally; message/activity changes are legitimate.
             # Static configuration, rule/account identity and encryption key are checked.

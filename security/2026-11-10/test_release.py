@@ -24,4 +24,15 @@ class ScopeTests(unittest.TestCase):
     def test_end_of_file_service(self):
         self.assertEqual(release.patch_image('services:\n  gmail-email-collector:\n    image: old\n','old','new'),'services:\n  gmail-email-collector:\n    image: new\n')
 
+class RuntimePolicyTests(unittest.TestCase):
+    def fixture(self,value):
+        return {"Config":{"Env":[]},"HostConfig":{"Dns":value,"DnsOptions":value,"DnsSearch":value,"Memory":1073741824},"Mounts":[]}
+    def test_unset_dns_null_and_empty_list_are_equivalent(self):
+        self.assertEqual(release.spec(self.fixture(None)),release.spec(self.fixture([])))
+    def test_explicit_dns_is_not_discarded(self):
+        self.assertNotEqual(release.spec(self.fixture(["192.0.2.53"])),release.spec(self.fixture([])))
+    def test_memory_limits_are_not_ignored(self):
+        before=self.fixture(None);after=self.fixture([]);after["HostConfig"]["Memory"]=0
+        self.assertNotEqual(release.spec(before),release.spec(after))
+
 if __name__=='__main__':unittest.main()
