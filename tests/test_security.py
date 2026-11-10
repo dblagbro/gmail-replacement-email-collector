@@ -70,7 +70,7 @@ def test_anonymous_routes_rejected(route):
             assert r.headers["location"] == PREFIX + "/login"
     run(check)
 
-@pytest.mark.parametrize("origin", ["https://untrusted.invalid", "null", "https://collector.test.untrusted.invalid", ""])
+@pytest.mark.parametrize("origin", ["https://untrusted.invalid", "null", "https://collector.test.untrusted.invalid", "https://[invalid", ""])
 def test_cross_origin_and_missing_origin_cannot_mutate(origin):
     async def check():
         async with client() as c:

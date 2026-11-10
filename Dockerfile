@@ -14,8 +14,8 @@ RUN sed -i "s|http://deb.debian.org|https://deb.debian.org|g" /etc/apt/sources.l
     && apt-get -o Acquire::Retries=0 install -y --no-install-recommends tini ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.lock .
+RUN pip install --no-cache-dir -r requirements.lock
 
 COPY app/ ./app/
 

@@ -2,7 +2,8 @@
 # (For multi-service hosts, just paste the service block into your existing compose file.)
 services:
   gmail-email-collector:
-    image: dblagbro/gmail-replacement-email-collector:latest
+    build: .
+    image: gmail-email-collector:1.1.0
     container_name: gmail-email-collector
     restart: unless-stopped
     ports:
@@ -12,6 +13,7 @@ services:
     environment:
       # If hosting behind nginx at a subpath, set URL_PREFIX to that path
       # URL_PREFIX: /email-forwarder
+      # PUBLIC_BASE_URL: https://mail-ui.example.invalid
       # Optional: built-in OAuth client (otherwise users use BYO mode in the UI)
       # BUILTIN_OAUTH_CLIENT_ID: ""
       # BUILTIN_OAUTH_CLIENT_SECRET: ""

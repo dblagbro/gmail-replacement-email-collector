@@ -73,7 +73,10 @@ app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__
 # ---- helpers ----
 
 def _origin(value: str) -> str:
-    parsed = urlsplit(value)
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return ""
     if parsed.scheme not in ("https", "http") or not parsed.netloc or parsed.username:
         return ""
     return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
