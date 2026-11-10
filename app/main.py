@@ -141,6 +141,8 @@ def setup_post(request: Request, password: str = Form(...), confirm: str = Form(
     auth.set_password(password)
     tok = auth.new_session_token()
     resp = RedirectResponse(f"{URL_PREFIX}/", status_code=303)
+    if URL_PREFIX:
+        resp.delete_cookie("ef_session", path="/")  # retire the legacy root-path cookie
     resp.set_cookie("ef_session", tok, httponly=True, samesite="lax",
                     secure=_external_origin(request).startswith("https://"),
                     path=URL_PREFIX or "/", max_age=SESSION_LIFETIME_HOURS * 3600)
@@ -162,6 +164,8 @@ def login_post(request: Request, password: str = Form(...)):
         return templates.TemplateResponse(request, "login.html", _ctx(request, error="Bad password"))
     tok = auth.new_session_token()
     resp = RedirectResponse(f"{URL_PREFIX}/", status_code=303)
+    if URL_PREFIX:
+        resp.delete_cookie("ef_session", path="/")  # retire the legacy root-path cookie
     resp.set_cookie("ef_session", tok, httponly=True, samesite="lax",
                     secure=_external_origin(request).startswith("https://"),
                     path=URL_PREFIX or "/", max_age=SESSION_LIFETIME_HOURS * 3600)
@@ -174,6 +178,8 @@ def logout(ef_session: str | None = Cookie(None)):
         auth.revoke_session(ef_session)
     resp = RedirectResponse(f"{URL_PREFIX}/login", status_code=303)
     resp.delete_cookie("ef_session", path=URL_PREFIX or "/")
+    if URL_PREFIX:
+        resp.delete_cookie("ef_session", path="/")
     return resp
 
 

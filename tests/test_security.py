@@ -46,7 +46,7 @@ def test_setup_login_templates_and_cookie():
             assert (await c.get("health")).json()["version"] == "1.1.0"
             response = await c.post("setup", data={"password": SYNTHETIC_PASSWORD, "confirm": SYNTHETIC_PASSWORD})
             assert response.status_code == 303
-            cookie = response.headers["set-cookie"]
+            cookie = response.headers.get_list("set-cookie")[-1]
             for attribute in ("HttpOnly", "Secure", "SameSite=lax", "Path=/email-collector", "Max-Age=86400"):
                 assert attribute in cookie
             for route in ("", "accounts/new", "settings", "archive", "oauth", "rules"):
@@ -249,3 +249,17 @@ def test_oauth_redirect_uses_configured_https_origin_behind_proxy(monkeypatch):
             assert (await c.post("oauth/start", data={"mode": "builtin"})).status_code == 303
     run(check)
     assert captured[0]["redirect_uri"] == ORIGIN + PREFIX + "/oauth/callback"
+
+
+def test_login_retires_legacy_root_cookie():
+    auth.set_password(SYNTHETIC_PASSWORD)
+    async def check():
+        async with client() as c:
+            c.cookies.set("ef_session", "legacy-synthetic", domain="collector.test", path="/")
+            response = await c.post("login", data={"password": SYNTHETIC_PASSWORD})
+            assert response.status_code == 303
+            assert not any(cookie.name == "ef_session" and cookie.path == "/" for cookie in c.cookies.jar)
+            assert (await c.get("")).status_code == 200
+            await c.get("logout")
+            assert not any(cookie.name == "ef_session" for cookie in c.cookies.jar)
+    run(check)
