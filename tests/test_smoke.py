@@ -4,7 +4,7 @@ import sys
 import tempfile
 
 # Use a throwaway data dir so the test doesn't touch a real install
-os.environ["EMAIL_FORWARDER_DATA_DIR"] = tempfile.mkdtemp(prefix="ef-test-")
+os.environ.setdefault("EMAIL_FORWARDER_DATA_DIR", tempfile.mkdtemp(prefix="ef-test-"))
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -25,7 +25,7 @@ def test_db_init_idempotent():
 
 def test_crypto_roundtrip():
     from app import crypto
-    plain = "Super*120120"
+    plain = "synthetic round-trip test payload"
     enc = crypto.encrypt(plain)
     assert enc != plain
     assert crypto.decrypt(enc) == plain

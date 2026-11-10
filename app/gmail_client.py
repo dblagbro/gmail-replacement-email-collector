@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import secrets
 from datetime import datetime, timezone
 from typing import Any
 
@@ -19,7 +20,7 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from app import db
+from app import db, oauth_state
 from app.config import BUILTIN_OAUTH_CLIENT_ID, BUILTIN_OAUTH_CLIENT_SECRET, GMAIL_SCOPES
 from app.crypto import decrypt, encrypt
 
@@ -52,8 +53,10 @@ def _client_config_from_row(row) -> dict[str, Any]:
 
 
 def begin_flow(redirect_uri: str, gmail_account: str | None = None,
-               use_builtin: bool = True, byo_client_json: str | None = None) -> tuple[str, str]:
+               use_builtin: bool = True, byo_client_json: str | None = None,
+               *, session_token: str) -> tuple[str, str]:
     """Start OAuth — returns (auth_url, state). Persists provisional client config."""
+    pending_key = "__pending__:" + secrets.token_urlsafe(24)
     if not use_builtin:
         if not byo_client_json:
             raise ValueError("BYO mode requires client_secret JSON")
@@ -64,7 +67,7 @@ def begin_flow(redirect_uri: str, gmail_account: str | None = None,
         cid, cs = cfg["client_id"], cfg["client_secret"]
         # Stash provisionally under a placeholder; real account email written after callback
         db.upsert_oauth(
-            gmail_account or "__pending__",
+            pending_key,
             client_id_enc=encrypt(cid),
             client_secret_enc=encrypt(cs),
             use_builtin_app=0,
@@ -72,25 +75,28 @@ def begin_flow(redirect_uri: str, gmail_account: str | None = None,
         )
     else:
         db.upsert_oauth(
-            gmail_account or "__pending__",
+            pending_key,
             use_builtin_app=1,
             scopes=" ".join(GMAIL_SCOPES),
         )
 
-    row = db.get_oauth(gmail_account or "__pending__")
-    flow = Flow.from_client_config(_client_config_from_row(row), scopes=GMAIL_SCOPES, redirect_uri=redirect_uri)
+    row = db.get_oauth(pending_key)
+    flow = Flow.from_client_config(_client_config_from_row(row), scopes=GMAIL_SCOPES, redirect_uri=redirect_uri, autogenerate_code_verifier=True)
     auth_url, state = flow.authorization_url(
         access_type="offline", prompt="consent", include_granted_scopes="true"
     )
+    oauth_state.remember(state, session_token, pending_key, flow.code_verifier, redirect_uri)
     return auth_url, state
 
 
-def complete_flow(code: str, redirect_uri: str, pending_key: str = "__pending__") -> str:
+def complete_flow(code: str, redirect_uri: str, *, state: str | None, session_token: str | None) -> str:
     """Exchange code -> tokens, identify the gmail account, persist tokens. Returns the account email."""
+    saved = oauth_state.consume(state, session_token, redirect_uri)
+    pending_key = saved["pending_key"]
     row = db.get_oauth(pending_key)
     if row is None:
         raise RuntimeError("OAuth flow state missing — restart the wizard")
-    flow = Flow.from_client_config(_client_config_from_row(row), scopes=GMAIL_SCOPES, redirect_uri=redirect_uri)
+    flow = Flow.from_client_config(_client_config_from_row(row), scopes=GMAIL_SCOPES, redirect_uri=redirect_uri, state=state, code_verifier=saved["verifier"])
     flow.fetch_token(code=code)
     creds = flow.credentials
 

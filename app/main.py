@@ -5,7 +5,7 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import Cookie, Depends, FastAPI, Form, HTTPException, Request, UploadFile, File
@@ -13,13 +13,14 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import archive, auth, db, forwarder, gmail_client, notifier
+from app import archive, auth, db, forwarder, gmail_client, notifier, oauth_state
 from app.config import (
     DEFAULT_LABEL,
     DEFAULT_RETENTION_DAYS,
     OAUTH_REMINDER_CHECK_HOURS,
     PUBLIC_BASE_URL,
     SWEEP_INTERVAL_HOURS,
+    SESSION_LIFETIME_HOURS,
     URL_PREFIX,
 )
 from app.crypto import encrypt
@@ -71,6 +72,31 @@ app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__
 
 # ---- helpers ----
 
+def _origin(value: str) -> str:
+    parsed = urlsplit(value)
+    if parsed.scheme not in ("https", "http") or not parsed.netloc or parsed.username:
+        return ""
+    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+
+def _external_origin(request: Request) -> str:
+    return _origin(PUBLIC_BASE_URL or str(request.base_url))
+
+@app.middleware("http")
+async def protect_browser_mutations(request: Request, call_next):
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        # UI form submissions send Origin, with Referer as a fallback.
+        # Non-browser clients must explicitly supply the same origin too.
+        source = request.headers.get("origin")
+        if source is None:
+            source = request.headers.get("referer", "")
+        expected = _external_origin(request)
+        if not expected or _origin(source) != expected:
+            return Response("Same-origin form submission required", status_code=403)
+    return await call_next(request)
+
+
+
+
 def _ctx(request: Request, **extra) -> dict:
     base = {"request": request, "url_prefix": URL_PREFIX, "now": datetime.now(timezone.utc)}
     base.update(extra)
@@ -100,19 +126,21 @@ def health():
 def setup_get(request: Request):
     if auth.is_setup():
         return RedirectResponse(f"{URL_PREFIX}/login", status_code=303)
-    return templates.TemplateResponse("setup.html", _ctx(request))
+    return templates.TemplateResponse(request, "setup.html", _ctx(request))
 
 
 @app.post("/setup")
 def setup_post(request: Request, password: str = Form(...), confirm: str = Form(...)):
     if auth.is_setup():
         return RedirectResponse(f"{URL_PREFIX}/login", status_code=303)
-    if password != confirm or len(password) < 8:
-        return templates.TemplateResponse("setup.html", _ctx(request, error="Passwords must match and be 8+ chars"))
+    if password != confirm or not 8 <= len(password.encode()) <= 72:
+        return templates.TemplateResponse(request, "setup.html", _ctx(request, error="Passwords must match and be 8 to 72 UTF-8 bytes"))
     auth.set_password(password)
     tok = auth.new_session_token()
     resp = RedirectResponse(f"{URL_PREFIX}/", status_code=303)
-    resp.set_cookie("ef_session", tok, httponly=True, samesite="lax", max_age=86400)
+    resp.set_cookie("ef_session", tok, httponly=True, samesite="lax",
+                    secure=_external_origin(request).startswith("https://"),
+                    path=URL_PREFIX or "/", max_age=SESSION_LIFETIME_HOURS * 3600)
     return resp
 
 
@@ -122,16 +150,18 @@ def setup_post(request: Request, password: str = Form(...), confirm: str = Form(
 def login_get(request: Request):
     if not auth.is_setup():
         return RedirectResponse(f"{URL_PREFIX}/setup", status_code=303)
-    return templates.TemplateResponse("login.html", _ctx(request))
+    return templates.TemplateResponse(request, "login.html", _ctx(request))
 
 
 @app.post("/login")
 def login_post(request: Request, password: str = Form(...)):
     if not auth.verify_password(password):
-        return templates.TemplateResponse("login.html", _ctx(request, error="Bad password"))
+        return templates.TemplateResponse(request, "login.html", _ctx(request, error="Bad password"))
     tok = auth.new_session_token()
     resp = RedirectResponse(f"{URL_PREFIX}/", status_code=303)
-    resp.set_cookie("ef_session", tok, httponly=True, samesite="lax", max_age=86400)
+    resp.set_cookie("ef_session", tok, httponly=True, samesite="lax",
+                    secure=_external_origin(request).startswith("https://"),
+                    path=URL_PREFIX or "/", max_age=SESSION_LIFETIME_HOURS * 3600)
     return resp
 
 
@@ -140,7 +170,7 @@ def logout(ef_session: str | None = Cookie(None)):
     if ef_session:
         auth.revoke_session(ef_session)
     resp = RedirectResponse(f"{URL_PREFIX}/login", status_code=303)
-    resp.delete_cookie("ef_session")
+    resp.delete_cookie("ef_session", path=URL_PREFIX or "/")
     return resp
 
 
@@ -148,7 +178,7 @@ def logout(ef_session: str | None = Cookie(None)):
 
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, _=Depends(_require_auth)):
-    return templates.TemplateResponse("dashboard.html", _ctx(
+    return templates.TemplateResponse(request, "dashboard.html", _ctx(
         request,
         accounts=db.list_accounts(),
         oauth_accounts=db.list_oauth_accounts(),
@@ -163,7 +193,7 @@ def dashboard(request: Request, _=Depends(_require_auth)):
 
 @app.get("/accounts/new", response_class=HTMLResponse)
 def account_new(request: Request, _=Depends(_require_auth)):
-    return templates.TemplateResponse("account_form.html", _ctx(
+    return templates.TemplateResponse(request, "account_form.html", _ctx(
         request, account=None, oauth_accounts=db.list_oauth_accounts(),
     ))
 
@@ -173,7 +203,7 @@ def account_edit(request: Request, aid: int, _=Depends(_require_auth)):
     a = db.get_account(aid)
     if a is None:
         raise HTTPException(404)
-    return templates.TemplateResponse("account_form.html", _ctx(
+    return templates.TemplateResponse(request, "account_form.html", _ctx(
         request, account=a, oauth_accounts=db.list_oauth_accounts(),
     ))
 
@@ -241,7 +271,7 @@ def account_toggle(aid: int, _=Depends(_require_auth)):
 
 @app.get("/settings", response_class=HTMLResponse)
 def settings_get(request: Request, _=Depends(_require_auth)):
-    return templates.TemplateResponse("settings.html", _ctx(
+    return templates.TemplateResponse(request, "settings.html", _ctx(
         request, settings=db.all_settings(),
     ))
 
@@ -279,12 +309,12 @@ def settings_password(
     confirm: str = Form(...),
 ):
     if not auth.verify_password(current):
-        return templates.TemplateResponse("settings.html", _ctx(
+        return templates.TemplateResponse(request, "settings.html", _ctx(
             request, settings=db.all_settings(), pw_error="Current password incorrect",
         ))
-    if new != confirm or len(new) < 8:
-        return templates.TemplateResponse("settings.html", _ctx(
-            request, settings=db.all_settings(), pw_error="New passwords must match and be 8+ chars",
+    if new != confirm or not 8 <= len(new.encode()) <= 72:
+        return templates.TemplateResponse(request, "settings.html", _ctx(
+            request, settings=db.all_settings(), pw_error="New passwords must match and be 8 to 72 UTF-8 bytes",
         ))
     auth.set_password(new)
     return RedirectResponse(f"{URL_PREFIX}/settings", status_code=303)
@@ -299,7 +329,7 @@ def archive_list(request: Request, _=Depends(_require_auth),
     page = max(1, page)
     per = 50
     msgs = db.list_messages(account_id=account_id, limit=per, offset=(page - 1) * per, search=q)
-    return templates.TemplateResponse("archive.html", _ctx(
+    return templates.TemplateResponse(request, "archive.html", _ctx(
         request, messages=msgs, accounts=db.list_accounts(),
         q=q or "", account_id=account_id, page=page, per=per,
     ))
@@ -316,7 +346,7 @@ def archive_view(request: Request, mid: int, _=Depends(_require_auth)):
             raw_excerpt = Path(m["eml_path"]).read_text(errors="replace")[:50000]
         except Exception as e:
             raw_excerpt = f"(error reading file: {e})"
-    return templates.TemplateResponse("message.html", _ctx(
+    return templates.TemplateResponse(request, "message.html", _ctx(
         request, m=m, raw_excerpt=raw_excerpt,
     ))
 
@@ -355,7 +385,7 @@ def archive_delete(mid: int, also_gmail: int = Form(0), _=Depends(_require_auth)
 
 @app.get("/oauth", response_class=HTMLResponse)
 def oauth_index(request: Request, _=Depends(_require_auth)):
-    return templates.TemplateResponse("oauth.html", _ctx(
+    return templates.TemplateResponse(request, "oauth.html", _ctx(
         request, oauth_accounts=db.list_oauth_accounts(),
     ))
 
@@ -363,7 +393,7 @@ def oauth_index(request: Request, _=Depends(_require_auth)):
 @app.post("/oauth/start")
 def oauth_start(
     request: Request,
-    _=Depends(_require_auth),
+    session=Depends(_require_auth),
     mode: str = Form("builtin"),
     client_secret_json: UploadFile | None = File(None),
 ):
@@ -378,16 +408,21 @@ def oauth_start(
         gmail_account="__pending__",
         use_builtin=(mode == "builtin"),
         byo_client_json=byo,
+        session_token=session,
     )
     return RedirectResponse(auth_url, status_code=303)
 
 
 @app.get("/oauth/callback")
-def oauth_callback(request: Request, code: str | None = None, error: str | None = None):
+def oauth_callback(request: Request, code: str | None = None, error: str | None = None,
+                   state: str | None = None, session=Depends(_require_auth)):
     if error or not code:
         raise HTTPException(400, f"OAuth error: {error or 'no code'}")
     redirect_uri = str(request.url_for("oauth_callback"))
-    email = gmail_client.complete_flow(code=code, redirect_uri=redirect_uri)
+    try:
+        email = gmail_client.complete_flow(code=code, redirect_uri=redirect_uri, state=state, session_token=session)
+    except oauth_state.InvalidOAuthState:
+        raise HTTPException(400, "OAuth state missing, expired or invalid; restart the wizard")
     db.log_activity("info", f"OAuth completed for {email}")
     return RedirectResponse(f"{URL_PREFIX}/oauth?ok={email}", status_code=303)
 
@@ -405,7 +440,7 @@ def rules_list(request: Request, _=Depends(_require_auth)):
     with db.conn() as c:
         rows = c.execute("SELECT r.*, a.name AS account_name FROM rules r "
                          "LEFT JOIN accounts a ON a.id=r.account_id ORDER BY r.id").fetchall()
-    return templates.TemplateResponse("rules.html", _ctx(
+    return templates.TemplateResponse(request, "rules.html", _ctx(
         request, rules=rows, accounts=db.list_accounts(),
     ))
 
