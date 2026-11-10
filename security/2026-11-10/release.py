@@ -100,6 +100,15 @@ def main():
         (backup/'manifest-private.json').write_text(json.dumps(source_manifest))
         tables=protected(snapshot);state['protected_table_counts']={k:v['count'] for k,v in tables.items()}
         assert protected(data)==tables
+        # SQLite read-only WAL access can update ephemeral shared-memory files.
+        # Normalize only the copied database, then hash that restore input.
+        with sqlite3.connect(snapshot/'collector.db') as c:
+            assert c.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()[0]==0
+        c.close()
+        assert protected(snapshot)==tables
+        source_manifest=manifest(snapshot)
+        state['normalized_snapshot_manifest_sha256']=hashlib.sha256(json.dumps(source_manifest,sort_keys=True).encode()).hexdigest()
+        (backup/'normalized-manifest-private.json').write_text(json.dumps(source_manifest))
         if args.action=='rehearse':
             command(['docker','start',SERVICE]);stopped=False;health(args.original_image);save('rehearsing_private_restores')
             results=[]

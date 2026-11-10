@@ -220,3 +220,32 @@ def test_lifespan_preserves_worker_and_scheduler_lifecycle(monkeypatch):
         main.forwarder.stop_all.assert_called_once()
         scheduler.shutdown.assert_called_once()
     run(check)
+
+
+def test_real_google_flow_generates_pkce_without_network(monkeypatch):
+    auth.set_password(SYNTHETIC_PASSWORD)
+    session = auth.new_session_token()
+    monkeypatch.setattr(gmail_client, "BUILTIN_OAUTH_CLIENT_ID", "synthetic-client")
+    monkeypatch.setattr(gmail_client, "BUILTIN_OAUTH_CLIENT_SECRET", "synthetic-secret")
+    redirect = ORIGIN + PREFIX + "/oauth/callback"
+    url, state = gmail_client.begin_flow(redirect, session_token=session)
+    from urllib.parse import urlsplit, parse_qs
+    query = parse_qs(urlsplit(url).query)
+    assert query["state"] == [state]
+    assert query["code_challenge_method"] == ["S256"]
+    saved = oauth_state.consume(state, session, redirect)
+    import base64, hashlib
+    expected = base64.urlsafe_b64encode(hashlib.sha256(saved["verifier"].encode()).digest()).rstrip(b"=").decode()
+    assert query["code_challenge"] == [expected]
+
+
+def test_oauth_redirect_uses_configured_https_origin_behind_proxy(monkeypatch):
+    auth.set_password(SYNTHETIC_PASSWORD)
+    token = auth.new_session_token()
+    captured = []
+    monkeypatch.setattr(gmail_client, "begin_flow", lambda **kwargs: (captured.append(kwargs) or "https://accounts.google.com/fixture", "state"))
+    async def check():
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=main.app), base_url="http://internal.invalid" + PREFIX + "/", headers={"Origin": ORIGIN, "Cookie": "ef_session=" + token}) as c:
+            assert (await c.post("oauth/start", data={"mode": "builtin"})).status_code == 303
+    run(check)
+    assert captured[0]["redirect_uri"] == ORIGIN + PREFIX + "/oauth/callback"

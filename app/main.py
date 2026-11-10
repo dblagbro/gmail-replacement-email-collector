@@ -400,7 +400,8 @@ def oauth_start(
     mode: str = Form("builtin"),
     client_secret_json: UploadFile | None = File(None),
 ):
-    redirect_uri = str(request.url_for("oauth_callback"))
+    redirect_uri = (_external_origin(request) + URL_PREFIX + "/oauth/callback"
+                    if PUBLIC_BASE_URL else str(request.url_for("oauth_callback")))
     byo = None
     if mode == "byo":
         if not client_secret_json:
@@ -421,7 +422,8 @@ def oauth_callback(request: Request, code: str | None = None, error: str | None 
                    state: str | None = None, session=Depends(_require_auth)):
     if error or not code:
         raise HTTPException(400, f"OAuth error: {error or 'no code'}")
-    redirect_uri = str(request.url_for("oauth_callback"))
+    redirect_uri = (_external_origin(request) + URL_PREFIX + "/oauth/callback"
+                    if PUBLIC_BASE_URL else str(request.url_for("oauth_callback")))
     try:
         email = gmail_client.complete_flow(code=code, redirect_uri=redirect_uri, state=state, session_token=session)
     except oauth_state.InvalidOAuthState:
